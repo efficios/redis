@@ -29,6 +29,7 @@
 
 #include "redis.h"
 #include "cluster.h"
+#include "lttng_ust_tp.h"
 
 #include <signal.h>
 #include <ctype.h>
@@ -51,6 +52,22 @@ robj *lookupKey(redisDb *db, robj *key) {
          * a copy on write madness. */
         if (server.rdb_child_pid == -1 && server.aof_child_pid == -1)
             val->lru = LRU_CLOCK();
+
+        /* LTTng-UST tracepoint for string keys, and string/integer values,
+         * are inserted below. */
+        if (key->type == REDIS_STRING && val->type == REDIS_STRING &&
+            (key->encoding == REDIS_ENCODING_RAW ||
+             key->encoding == REDIS_ENCODING_EMBSTR)) {
+            if (val->encoding == REDIS_ENCODING_RAW ||
+                val->encoding == REDIS_ENCODING_EMBSTR) {
+                tracepoint(redis, lookupKeyStr, (char*) key->ptr,
+                           (char*) val->ptr);
+            } else if (val->encoding == REDIS_ENCODING_INT) {
+                tracepoint(redis, lookupKeyLong, (char*) key->ptr,
+                           (long) val->ptr);
+            }
+        }
+
         return val;
     } else {
         return NULL;
@@ -116,6 +133,21 @@ robj *lookupKeyWriteOrReply(redisClient *c, robj *key, robj *reply) {
  *
  * The program is aborted if the key already exists. */
 void dbAdd(redisDb *db, robj *key, robj *val) {
+    /* LTTng-UST tracepoints for integer and string values are
+     * inserted below. */
+    if (key->type == REDIS_STRING && val->type == REDIS_STRING &&
+        (key->encoding == REDIS_ENCODING_RAW ||
+         key->encoding == REDIS_ENCODING_EMBSTR)) {
+        if (val->encoding == REDIS_ENCODING_RAW ||
+            val->encoding == REDIS_ENCODING_EMBSTR) {
+            tracepoint(redis, dbAddStr, (char*) key->ptr,
+                       (char*) val->ptr);
+        } else if (val->encoding == REDIS_ENCODING_INT) {
+            tracepoint(redis, dbAddLong, (char*) key->ptr,
+                       (long) val->ptr);
+        }
+    }
+
     sds copy = sdsdup(key->ptr);
     int retval = dictAdd(db->dict, copy, val);
 
@@ -130,6 +162,21 @@ void dbAdd(redisDb *db, robj *key, robj *val) {
  *
  * The program is aborted if the key was not already present. */
 void dbOverwrite(redisDb *db, robj *key, robj *val) {
+    /* LTTng-UST tracepoints for integer and string values are
+     * inserted below. */
+    if (key->type == REDIS_STRING && val->type == REDIS_STRING &&
+        (key->encoding == REDIS_ENCODING_RAW ||
+         key->encoding == REDIS_ENCODING_EMBSTR)) {
+        if (val->encoding == REDIS_ENCODING_RAW ||
+            val->encoding == REDIS_ENCODING_EMBSTR) {
+            tracepoint(redis, dbOverwriteStr, (char*) key->ptr,
+                       (char*) val->ptr);
+        } else if (val->encoding == REDIS_ENCODING_INT) {
+            tracepoint(redis, dbOverwriteLong, (char*) key->ptr,
+                       (long) val->ptr);
+        }
+    }
+
     dictEntry *de = dictFind(db->dict,key->ptr);
 
     redisAssertWithInfo(NULL,key,de != NULL);
